@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Compañero IA</title>
+    <title>Mi App de Seducción IA</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2f3d58">
     <style>
@@ -19,16 +19,29 @@
         #boton-enviar { padding: 10px 20px; border-radius: 20px; border: none; background: #e94560; color: white; font-weight: bold; cursor: pointer; }
         #boton-enviar:disabled { opacity: 0.5; }
         #estado { font-size: 0.8em; color: #888; text-align: center; padding-bottom: 5px; }
+        #medidor-interes { height: 10px; background: #333; border-radius: 5px; overflow: hidden; margin: 0 10px; }
+        #barra-interes { height: 100%; width: 0%; background: linear-gradient(90deg, #e94560, #ff6b9d); transition: width 0.5s; }
+        #etiqueta-interes { font-size: 0.75em; color: #aaa; text-align: center; padding: 3px 0; }
+        #panel-crear { display: none; padding: 10px; background: #0f0f1a; border-top: 1px solid #333; flex-direction: column; gap: 5px; }
+        #panel-crear input, #panel-crear textarea { padding: 8px; border-radius: 5px; border: none; background: #16213e; color: white; font-family: inherit; }
+        #panel-crear textarea { resize: vertical; min-height: 60px; }
+        #panel-crear button { padding: 8px; border-radius: 5px; border: none; background: #e94560; color: white; font-weight: bold; cursor: pointer; }
+        .fila-botones { display: flex; gap: 5px; }
+        .fila-botones button { flex: 1; font-size: 0.8em; padding: 6px; }
     </style>
 </head>
 <body>
     <div id="chat-container">
-        <div class="mensaje ia">¡Hola! Soy tu compañero de aventuras. Elige un personaje abajo y empecemos a hablar.</div>
+        <div class="mensaje ia">Elige un personaje abajo para empezar. Tu objetivo: conquistarla. Sube su nivel de interés con mensajes ingeniosos, atrevidos y con química. Si la aburres o eres demasiado intenso, bajará.</div>
     </div>
     <div id="controles">
+        <div id="etiqueta-interes">Interés: 0% — Desconocida</div>
+        <div id="medidor-interes"><div id="barra-interes"></div></div>
         <select id="selector-personaje">
-            <option value="elfo">Elfo Aventurero (Sarcástico)</option>
-            <option value="mago">Mago Misterioso (Sabio)</option>
+            <option value="hermanastra">🔥 Hermanastra traviesa (te provoca en casa)</option>
+            <option value="amiga">💕 Amiga del cole que le gustas (pero no lo admite)</option>
+            <option value="primas">☀️ Primas que vienen a la piscina (verano picante)</option>
+            <option value="personalizado">✏️ Crear personaje personalizado...</option>
         </select>
         <div id="input-area">
             <input type="text" id="mensaje-input" placeholder="Escribe tu mensaje..." autocomplete="off">
@@ -37,24 +50,63 @@
         <div id="estado">Listo para chatear</div>
     </div>
 
+    <!-- Panel para crear personaje personalizado -->
+    <div id="panel-crear">
+        <input type="text" id="crear-nombre" placeholder="Nombre del personaje (ej. Lucía)">
+        <input type="text" id="crear-relacion" placeholder="Relación (ej. compañera de piso)">
+        <textarea id="crear-descripcion" placeholder="Descripción y personalidad (ej. es tímida al principio pero muy provocadora cuando entra en confianza, le gusta el coqueteo sutil...)"></textarea>
+        <div class="fila-botones">
+            <button id="boton-guardar-personaje">Guardar y usar</button>
+            <button id="boton-cancelar-crear" style="background:#555;">Cancelar</button>
+        </div>
+    </div>
+
     <script>
         // --- CONFIGURACIÓN ---
-        // ¡IMPORTANTE! Pega aquí tu clave de OpenRouter (la obtienes en el Paso 3)
         const API_KEY = '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'; 
-        
-        const PERSONAJES = {
-            elfo: "Eres un elfo aventurero llamado Legolas. Eres sarcástico, ágil y un poco arrogante, pero leal. Usas un lenguaje informal y moderno, con humor. Responde siempre en primera persona y mantén el rol.",
-            mago: "Eres un mago anciano y misterioso llamado Gandalf. Eres sabio, hablas con calma y utilizas metáforas. Evitas dar respuestas directas si puedes dar un consejo enigmático. Responde siempre en primera persona y mantén el rol."
+        const MODELO = 'openrouter/free'; // Router de modelos gratuitos
+
+        // --- PERSONAJES PREDEFINIDOS (puedes editar libremente) ---
+        const PERSONAJES_BASE = {
+            hermanastra: {
+                nombre: "Vega",
+                relacion: "tu hermanastra",
+                descripcion: "Tiene 22 años, estudia diseño, es descarada, bromista y le encanta provocarte cuando estáis solos en casa. Finge indiferencia pero busca tu atención. Le gustan los retos y que le sigas el juego sin ser pesado.",
+                apertura: "*Vega aparece en el salón en ropa de casa, con una sonrisa pícara.* Vaya, justo a ti te tenía que encontrar. ¿Me pasas el mando o prefieres que te lo quite de las manos?"
+            },
+            amiga: {
+                nombre: "Claudia",
+                relacion: "tu amiga del colegio",
+                descripcion: "Tiene 20 años, es popular, segura de sí misma pero se pone nerviosa cuando la pillas desprevenida. Lleva tiempo sintiendo algo por ti pero lo niega con bromas. Reacciona bien al humor y a la seguridad, mal a la insistencia.",
+                apertura: "*Claudia te ve en la cafetería y se acerca con una sonrisa de medio lado.* ¿Otra vez tú por aquí? La próxima vez tendrás que invitarme a algo si quieres que me quede, ¿eh?"
+            },
+            primas: {
+                nombre: "Paula y Marta",
+                relacion: "tus primas que vienen a la piscina",
+                descripcion: "Paula (21) es la mayor, lanzada y competitiva. Marta (19) es más callada pero observa todo y suelta comentarios que dejan pensando. Están de visita en verano y el ambiente en la piscina se vuelve tenso y divertido a partes iguales. Les gusta el juego, el pique sano y los cumplidos ingeniosos.",
+                apertura: "*Las dos están tumbadas al sol junto a la piscina. Paula se baja las gafas de sol y te mira.* ¿Piensas quedarte ahí mirando o vas a traer algo de beber? Marta se ríe por lo bajo sin decir nada."
+            }
         };
 
-        let historialConversacion = []; // Aquí se guarda la memoria (solo en esta sesión)
+        // Personaje personalizado guardado en localStorage
+        let personajePersonalizado = JSON.parse(localStorage.getItem('personajePersonalizado')) || null;
 
+        // --- Estado ---
+        let historialConversacion = [];
+        let interes = 0; // 0-100
+        let personajeActual = null;
+
+        // --- Elementos ---
         const chatContainer = document.getElementById('chat-container');
         const inputMensaje = document.getElementById('mensaje-input');
         const botonEnviar = document.getElementById('boton-enviar');
         const selectorPersonaje = document.getElementById('selector-personaje');
         const estadoDiv = document.getElementById('estado');
+        const barraInteres = document.getElementById('barra-interes');
+        const etiquetaInteres = document.getElementById('etiqueta-interes');
+        const panelCrear = document.getElementById('panel-crear');
 
+        // --- Utilidades ---
         function añadirMensaje(texto, tipo) {
             const div = document.createElement('div');
             div.className = `mensaje ${tipo}`;
@@ -63,30 +115,75 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
+        function actualizarMedidor(delta) {
+            interes = Math.max(0, Math.min(100, interes + delta));
+            barraInteres.style.width = interes + '%';
+            let etiqueta = 'Desconocida';
+            if (interes >= 15) etiqueta = 'Curiosa';
+            if (interes >= 35) etiqueta = 'Interesada';
+            if (interes >= 55) etiqueta = 'Coqueta';
+            if (interes >= 75) etiqueta = 'Deseando más';
+            if (interes >= 95) etiqueta = 'Enamorada';
+            etiquetaInteres.textContent = `Interés: ${interes}% — ${etiqueta}`;
+        }
+
+        function construirSystemPrompt(personaje) {
+            return `Eres ${personaje.nombre}, ${personaje.relacion}. ${personaje.descripcion}
+
+REGLAS DEL JUEGO DE SEDUCCIÓN:
+- Estás en un juego de coqueteo con el usuario. Reacciona de forma natural, con personalidad propia.
+- Tienes un medidor de interés interno (0-100). Empiezas en 10. Cada respuesta del usuario puede subirlo o bajarlo.
+- Sube más si el usuario es ingenioso, seguro, divertido, sutil o lee bien la situación.
+- Baja si es pesado, vulgar sin gracia, inseguro en exceso o demasiado directo sin construir tensión.
+- No seas fácil: muestra resistencia al principio, deja que se gane tu atención.
+- Usa descripciones entre asteriscos para acciones y lenguaje corporal (*sonríe de lado*, *se muerde el labio*, *aparta la mirada*).
+- Responde SIEMPRE en español, en primera persona, manteniendo el rol.
+- Al final de cada respuesta, AÑADE UNA LÍNEA EXACTA con este formato: [INTERES: +X] o [INTERES: -X], donde X es un número entre 1 y 15, indicando cuánto ha subido o bajado tu interés con el último mensaje del usuario. Esta línea es interna, no la comentes.
+- No escribas contenido sexual explícito. Mantén un tono sugerente, con tensión y química.`;
+        }
+
+        function cargarPersonaje(clave) {
+            if (clave === 'personalizado') {
+                if (!personajePersonalizado) {
+                    alert('Aún no has creado un personaje personalizado. Rellena el formulario.');
+                    selectorPersonaje.value = 'hermanastra';
+                    return;
+                }
+                personajeActual = personajePersonalizado;
+            } else {
+                personajeActual = PERSONAJES_BASE[clave];
+            }
+            historialConversacion = [];
+            interes = 10;
+            actualizarMedidor(0);
+            chatContainer.innerHTML = '';
+            añadirMensaje(personajeActual.apertura, 'ia');
+            estadoDiv.textContent = `Hablando con ${personajeActual.nombre}`;
+        }
+
+        // --- Enviar mensaje ---
         async function enviarMensaje() {
             const texto = inputMensaje.value.trim();
             if (!texto) return;
             if (API_KEY === 'PEGA_AQUI_TU_CLAVE_DE_OPENROUTER') {
-                alert('Por favor, edita el archivo index.html y pega tu clave de OpenRouter en la variable API_KEY.');
+                alert('Edita index.html y pega tu clave de OpenRouter en API_KEY.');
+                return;
+            }
+            if (!personajeActual) {
+                alert('Elige un personaje primero.');
                 return;
             }
 
-            // Mostrar mensaje del usuario
             añadirMensaje(texto, 'usuario');
             inputMensaje.value = '';
             botonEnviar.disabled = true;
             estadoDiv.textContent = 'Pensando...';
 
-            // Obtener la personalidad del personaje seleccionado
-            const personajeSeleccionado = selectorPersonaje.value;
-            const systemPrompt = PERSONAJES[personajeSeleccionado];
-
-            // Construir el array de mensajes para la API
-            // Incluimos el system prompt + el historial reciente para que tenga memoria
+            const systemPrompt = construirSystemPrompt(personajeActual);
             const mensajesParaAPI = [
-                { role: "system", content: systemPrompt },
-                ...historialConversacion, // Mensajes anteriores
-                { role: "user", content: texto }
+                { role: 'system', content: systemPrompt },
+                ...historialConversacion.slice(-12),
+                { role: 'user', content: texto }
             ];
 
             try {
@@ -96,36 +193,33 @@
                         "Authorization": `Bearer ${API_KEY}`,
                         "Content-Type": "application/json"
                     },
-                    body: JSON.stringify({
-                        model: "openrouter/free", // Usa el router de modelos gratuitos
-                        messages: mensajesParaAPI
-                    })
+                    body: JSON.stringify({ model: MODELO, messages: mensajesParaAPI })
                 });
 
-                if (!response.ok) {
-                    throw new Error(`Error en la API: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`Error API: ${response.status}`);
 
                 const data = await response.json();
-                const respuestaIA = data.choices[0].message.content;
+                let respuestaIA = data.choices[0].message.content;
 
-                // Mostrar respuesta
-                añadirMensaje(respuestaIA, 'ia');
-
-                // Guardar en el historial para memoria futura (límite de 10 mensajes para no gastar tokens)
-                historialConversacion.push({ role: "user", content: texto });
-                historialConversacion.push({ role: "assistant", content: respuestaIA });
-                
-                // Mantener solo los últimos 10 mensajes en memoria para no sobrecargar
-                if (historialConversacion.length > 10) {
-                    historialConversacion = historialConversacion.slice(-10);
+                // Extraer el marcador de interés
+                let delta = 0;
+                const match = respuestaIA.match(/\[INTERES:\s*([+-]?\d+)\]/i);
+                if (match) {
+                    delta = parseInt(match[1], 10) || 0;
+                    respuestaIA = respuestaIA.replace(/\[INTERES:[^\]]*\]/gi, '').trim();
                 }
 
-                estadoDiv.textContent = 'Listo';
+                añadirMensaje(respuestaIA, 'ia');
+                actualizarMedidor(delta);
 
+                historialConversacion.push({ role: 'user', content: texto });
+                historialConversacion.push({ role: 'assistant', content: respuestaIA });
+                if (historialConversacion.length > 20) historialConversacion = historialConversacion.slice(-20);
+
+                estadoDiv.textContent = 'Listo';
             } catch (error) {
                 console.error(error);
-                añadirMensaje("Lo siento, hubo un error al conectar con la IA. Revisa la consola (F12) para más detalles.", 'ia');
+                añadirMensaje('Error al conectar con la IA. Revisa la consola (F12).', 'ia');
                 estadoDiv.textContent = 'Error';
             } finally {
                 botonEnviar.disabled = false;
@@ -133,19 +227,59 @@
             }
         }
 
+        // --- Crear personaje personalizado ---
+        document.getElementById('boton-guardar-personaje').addEventListener('click', () => {
+            const nombre = document.getElementById('crear-nombre').value.trim();
+            const relacion = document.getElementById('crear-relacion').value.trim();
+            const descripcion = document.getElementById('crear-descripcion').value.trim();
+            if (!nombre || !relacion || !descripcion) {
+                alert('Rellena nombre, relación y descripción.');
+                return;
+            }
+            personajePersonalizado = {
+                nombre,
+                relacion,
+                descripcion,
+                apertura: `*${nombre} te mira con curiosidad.* Vaya, no esperaba encontrarte aquí. ¿Qué tal?`
+            };
+            localStorage.setItem('personajePersonalizado', JSON.stringify(personajePersonalizado));
+            panelCrear.style.display = 'none';
+            // Añadir opción al selector si no existe
+            let opcion = selectorPersonaje.querySelector('option[value="personalizado"]');
+            opcion.textContent = `✏️ ${nombre} (personalizado)`;
+            selectorPersonaje.value = 'personalizado';
+            cargarPersonaje('personalizado');
+        });
+
+        document.getElementById('boton-cancelar-crear').addEventListener('click', () => {
+            panelCrear.style.display = 'none';
+        });
+
+        // --- Eventos ---
         botonEnviar.addEventListener('click', enviarMensaje);
         inputMensaje.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') enviarMensaje();
         });
 
-        // Limpiar memoria si cambias de personaje
         selectorPersonaje.addEventListener('change', () => {
-            historialConversacion = [];
-            chatContainer.innerHTML = '';
-            añadirMensaje(`Has cambiado a ${selectorPersonaje.options[selectorPersonaje.selectedIndex].text}. La memoria se ha reiniciado.`, 'ia');
+            const valor = selectorPersonaje.value;
+            if (valor === 'personalizado' && !personajePersonalizado) {
+                // Mostrar panel de creación
+                panelCrear.style.display = 'flex';
+                return;
+            }
+            panelCrear.style.display = 'none';
+            cargarPersonaje(valor);
         });
 
-        // Registrar el Service Worker (para que sea PWA)
+        // Cargar personaje inicial
+        cargarPersonaje('hermanastra');
+        if (personajePersonalizado) {
+            const opcion = selectorPersonaje.querySelector('option[value="personalizado"]');
+            opcion.textContent = `✏️ ${personajePersonalizado.nombre} (personalizado)`;
+        }
+
+        // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('service-worker.js');
         }
