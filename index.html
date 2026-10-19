@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Compañero IA</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2f3d58">
+    <style>
+        body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #eee; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
+        #chat-container { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .mensaje { max-width: 80%; padding: 10px 15px; border-radius: 15px; line-height: 1.4; white-space: pre-wrap; }
+        .usuario { align-self: flex-end; background: #0f3460; border-bottom-right-radius: 2px; }
+        .ia { align-self: flex-start; background: #16213e; border-bottom-left-radius: 2px; }
+        #controles { padding: 10px; background: #0f0f1a; display: flex; flex-direction: column; gap: 8px; }
+        #selector-personaje { padding: 8px; border-radius: 5px; border: none; background: #16213e; color: white; }
+        #input-area { display: flex; gap: 5px; }
+        #mensaje-input { flex: 1; padding: 12px; border-radius: 20px; border: none; background: #16213e; color: white; outline: none; }
+        #boton-enviar { padding: 10px 20px; border-radius: 20px; border: none; background: #e94560; color: white; font-weight: bold; cursor: pointer; }
+        #boton-enviar:disabled { opacity: 0.5; }
+        #estado { font-size: 0.8em; color: #888; text-align: center; padding-bottom: 5px; }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div class="mensaje ia">¡Hola! Soy tu compañero de aventuras. Elige un personaje abajo y empecemos a hablar.</div>
+    </div>
+    <div id="controles">
+        <select id="selector-personaje">
+            <option value="elfo">Elfo Aventurero (Sarcástico)</option>
+            <option value="mago">Mago Misterioso (Sabio)</option>
+        </select>
+        <div id="input-area">
+            <input type="text" id="mensaje-input" placeholder="Escribe tu mensaje..." autocomplete="off">
+            <button id="boton-enviar">Enviar</button>
+        </div>
+        <div id="estado">Listo para chatear</div>
+    </div>
+
+    <script>
+        // --- CONFIGURACIÓN ---
+        // ¡IMPORTANTE! Pega aquí tu clave de OpenRouter (la obtienes en el Paso 3)
+        const API_KEY = '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'; 
+        
+        const PERSONAJES = {
+            elfo: "Eres un elfo aventurero llamado Legolas. Eres sarcástico, ágil y un poco arrogante, pero leal. Usas un lenguaje informal y moderno, con humor. Responde siempre en primera persona y mantén el rol.",
+            mago: "Eres un mago anciano y misterioso llamado Gandalf. Eres sabio, hablas con calma y utilizas metáforas. Evitas dar respuestas directas si puedes dar un consejo enigmático. Responde siempre en primera persona y mantén el rol."
+        };
+
+        let historialConversacion = []; // Aquí se guarda la memoria (solo en esta sesión)
+
+        const chatContainer = document.getElementById('chat-container');
+        const inputMensaje = document.getElementById('mensaje-input');
+        const botonEnviar = document.getElementById('boton-enviar');
+        const selectorPersonaje = document.getElementById('selector-personaje');
+        const estadoDiv = document.getElementById('estado');
+
+        function añadirMensaje(texto, tipo) {
+            const div = document.createElement('div');
+            div.className = `mensaje ${tipo}`;
+            div.textContent = texto;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function enviarMensaje() {
+            const texto = inputMensaje.value.trim();
+            if (!texto) return;
+            if (API_KEY === 'PEGA_AQUI_TU_CLAVE_DE_OPENROUTER') {
+                alert('Por favor, edita el archivo index.html y pega tu clave de OpenRouter en la variable API_KEY.');
+                return;
+            }
+
+            // Mostrar mensaje del usuario
+            añadirMensaje(texto, 'usuario');
+            inputMensaje.value = '';
+            botonEnviar.disabled = true;
+            estadoDiv.textContent = 'Pensando...';
+
+            // Obtener la personalidad del personaje seleccionado
+            const personajeSeleccionado = selectorPersonaje.value;
+            const systemPrompt = PERSONAJES[personajeSeleccionado];
+
+            // Construir el array de mensajes para la API
+            // Incluimos el system prompt + el historial reciente para que tenga memoria
+            const mensajesParaAPI = [
+                { role: "system", content: systemPrompt },
+                ...historialConversacion, // Mensajes anteriores
+                { role: "user", content: texto }
+            ];
+
+            try {
+                const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${API_KEY}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        model: "openrouter/free", // Usa el router de modelos gratuitos
+                        messages: mensajesParaAPI
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Error en la API: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const respuestaIA = data.choices[0].message.content;
+
+                // Mostrar respuesta
+                añadirMensaje(respuestaIA, 'ia');
+
+                // Guardar en el historial para memoria futura (límite de 10 mensajes para no gastar tokens)
+                historialConversacion.push({ role: "user", content: texto });
+                historialConversacion.push({ role: "assistant", content: respuestaIA });
+                
+                // Mantener solo los últimos 10 mensajes en memoria para no sobrecargar
+                if (historialConversacion.length > 10) {
+                    historialConversacion = historialConversacion.slice(-10);
+                }
+
+                estadoDiv.textContent = 'Listo';
+
+            } catch (error) {
+                console.error(error);
+                añadirMensaje("Lo siento, hubo un error al conectar con la IA. Revisa la consola (F12) para más detalles.", 'ia');
+                estadoDiv.textContent = 'Error';
+            } finally {
+                botonEnviar.disabled = false;
+                inputMensaje.focus();
+            }
+        }
+
+        botonEnviar.addEventListener('click', enviarMensaje);
+        inputMensaje.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') enviarMensaje();
+        });
+
+        // Limpiar memoria si cambias de personaje
+        selectorPersonaje.addEventListener('change', () => {
+            historialConversacion = [];
+            chatContainer.innerHTML = '';
+            añadirMensaje(`Has cambiado a ${selectorPersonaje.options[selectorPersonaje.selectedIndex].text}. La memoria se ha reiniciado.`, 'ia');
+        });
+
+        // Registrar el Service Worker (para que sea PWA)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js');
+        }
+    </script>
+</body>
+</html>
